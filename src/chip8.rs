@@ -138,235 +138,178 @@ impl Chip8 {
         }
     }
 
-    // 00EE
-    // The interpreter sets the program counter to the address at the top of the stack,
-    // then subtracts 1 from the stack pointer.
+    // 00EE - RET
     fn ret(&mut self) {
-        println!("00EE - RET");
         self.pc = self.stack[self.sp as usize] as u16;
         if self.sp != 0 { self.sp -= 1; }
     }
 
-    // 00E0
-    // Clear the display.
+    // 00E0 - CLS
     fn cls(&mut self) {
-        println!("00E0 - CLS");
         self.display = [[false; 64]; 32];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 1nnn
-    // The interpreter sets the program counter to nnn.
+    // 1nnn - JP addr
     fn jp_addr(&mut self, nnn: u16) {
-        println!("1nnn - JP addr");
         self.pc = nnn;
     }
 
-    // 2nnn
-    // The interpreter increments the stack pointer, then puts the current PC on the top
-    // of the stack. The PC is then set to nnn.
+    // 2nnn - CALL addr
     fn call_addr(&mut self, nnn: u16) {
-        println!("2nnn - CALL addr");
         self.sp += 1;
         self.stack[self.sp as usize] = self.pc as u8;
         self.pc = nnn;
     }
 
-    // 3xkk
-    // The interpreter compares register Vx to kk, and if they are equal,
-    // increments the program counter by 2.
+    // 3xkk - SE Vx, byte
     fn se_vx_byte(&mut self, x: u8, kk: u8) {
-        println!("3xkk - SE Vx, byte");
-        if self.v[x as usize] == kk { self.pc += 2; }
+        if self.v[x as usize] == kk { self.pc += 4; }
     }
 
-    // 4xkk
-    // The interpreter compares register Vx to kk, and if they are not equal,
-    // increments the program counter by 2.
+    // 4xkk - SNE Vx, byte
     fn sne_vx_byte(&mut self, x: u8, kk: u8) {
-        println!("4xkk - SNE Vx, byte");
-        if self.v[x as usize] != kk { self.pc += 2; }
+        if self.v[x as usize] != kk { self.pc += 4; }
     }
 
-    // 5xy0
-    // The interpreter compares register Vx to register Vy, and if they are equal,
-    // increments the program counter by 2.
+    // 5xy0 - SE Vx, Vy
     fn se_vx_vy(&mut self, x: u8, y: u8) {
-        println!("5xy0 - SE Vx, Vy");
-        if self.v[x as usize] == self.v[y as usize] { self.pc += 2; }
+        if self.v[x as usize] == self.v[y as usize] { self.pc += 4; }
     }
 
-    // 6xkk
-    // The interpreter puts the value kk into register Vx
+    // 6xkk - LD Vx, byte
     fn ld_vx_byte(&mut self, x: u8, kk: u8) {
-        println!("6xkk - LD Vx, byte");
         self.v[x as usize] = kk;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 7xkk
-    // Adds the value kk to the value of register Vx, then stores the result in Vx
+    // 7xkk - ADD Vx, byte
     fn add_vx_byte(&mut self, x: u8, kk: u8) {
-        println!("7xkk - ADD Vx, byte");
         self.v[x as usize] += kk;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy0
-    // Stores the value of register Vy in register Vx.
+    // 8xy0 - LD Vx, Vy
     fn ld_vx_vy(&mut self, x: u8, y: u8) {
-        println!("8xy0 - LD Vx, Vy");
         self.v[x as usize] = self.v[y as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy1
-    // Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx.
+    // 8xy1 - OR Vx, Vy
     fn or_vx_vy(&mut self, x: u8, y: u8) {
-        println!("8xy1 - OR Vx, Vy");
         self.v[x as usize] |= self.v[y as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy2
-    // Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx.
+    // 8xy2 - AND Vx, Vy
     fn and_vx_vy(&mut self, x: u8, y: u8) {
-        println!("8xy2 - AND Vx, Vy");
         self.v[x as usize] &= self.v[y as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy3
-    // Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx.
+    // 8xy3 - XOR Vx, Vy
     fn xor_vx_vy(&mut self, x: u8, y: u8) {
-        println!("8xy3 - XOR Vx, Vy");
         self.v[x as usize] ^= self.v[y as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy4
-    // The values of Vx and Vy are added together. If the result is greater
-    // than 8 bits (i.e., > 255,) VF is set to 1, otherwise 0.
+    // 8xy4 - ADD Vx, Vy
     fn add_vx_vy(&mut self, x: u8, y: u8) {
-        println!("8xy4 - ADD Vx, Vy");
         let sum = self.v[x as usize] as u16 + self.v[y as usize] as u16;
         self.v[x as usize] = sum as u8;
         self.v[0xF] = (sum > 255) as u8;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy5
-    // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is
-    // subtracted from Vx, and the results stored in Vx
+    // 8xy5 - SUB Vx, Vy
     fn sub_vx_vy(&mut self, x: u8, y: u8) {
-        println!("8xy5 - SUB Vx, Vy");
         self.v[0xf] = (self.v[x as usize] > self.v[y as usize]) as u8;
         self.v[x as usize] -= self.v[y as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy6
-    // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is
-    // divided by 2.
+    // 8xy6 - SHR Vx {, Vy}
     fn shr_vx_vy(&mut self, x: u8) {
-        println!("8xy6 - SHR Vx");
         self.v[0xf] = (self.v[x as usize] & 0b1 == 1) as u8;
         self.v[x as usize] >>= 1;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xy7
-    // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is
-    // subtracted from Vy, and the results stored in Vx.
+    // 8xy7 - SUBN Vx, Vy
     fn subn_vx_vy(&mut self, x: u8, y: u8) {
-        println!("8xy7 - SUBN Vx, Vy");
         self.v[0xf] = (self.v[y as usize] > self.v[x as usize]) as u8;
         self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 8xyE
-    // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is
-    // multiplied by 2.
+    // 8xyE - SHL Vx {, Vy}
     fn shl_vx_vy(&mut self, x: u8) {
-        println!("8xyE - SHL Vx");
         self.v[0xf] = (self.v[x as usize] >> 7 == 1) as u8;
         self.v[x as usize] <<= 1;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // 9xy0
-    // The values of Vx and Vy are compared, and if they are not equal, the
-    // program counter is increased by 2.
+    // 9xy0 - SNE Vx, Vy
     fn sne_vx_vy(&mut self, x: u8, y: u8) {
-        println!("9xy0 - SNE Vx, Vy");
-        if self.v[x as usize] != self.v[y as usize] { self.pc += 2; }
+        if self.v[x as usize] != self.v[y as usize] { self.pc += 4; }
     }
 
-    // Annn
-    // The value of register I is set to nnn
+    // Annn - LD I, addr
     fn ld_i_addr(&mut self, nnn: u16) {
-        println!("Annn - LD I, addr");
         self.i = nnn;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Bnnn
-    // The program counter is set to nnn plus the value of V0.
+    // Bnnn - JP V0, addr
     fn jp_v0_addr(&mut self, nnn: u16) {
-        println!("Bnnn - JP V0, addr");
         self.pc = self.v[0] as u16 + nnn;
     }
 
-    // Cxkk
-    // The interpreter generates a random number from 0 to 255, which is then
-    // ANDed with the value kk. The results are stored in Vx.
+    // Cxkk - RND Vx, byte
     fn rnd_vx_byte(&mut self, x: u8, kk: u8) {
-        println!("Cxkk - RND Vx, byte");
         let random_byte: u8 = rand::thread_rng().gen_range(0..255);
         self.v[x as usize] = random_byte & kk;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Dxyn
-    // The interpreter reads n
-    // bytes from memory, starting at the address stored in I. These bytes are then displayed as sprites on screen
-    // at coordinates (Vx, Vy). Sprites are XOR’d onto the existing screen. If this causes any pixels to be erased,
-    // VF is set to 1, otherwise it is set to 0. If the sprite is positioned so part of it is outside the coordinates of
-    // the display, it wraps around to the opposite side of the screen.
+    // Dxyn - DRW Vx, Vy, nibble
+    // ............................................
+    // : display  ^  value : new_display : erased :
+    // :...................:.............:........:
+    // :       0 :       0 :           0 :      0 :
+    // :       0 :       1 :           1 :      0 :
+    // :       1 :       0 :           1 :      0 :
+    // :       1 :       1 :           0 :      1 :
+    // :.........:.........:.............:........:
     fn drw_vx_vy_nibble(&mut self, x: u8, y: u8, n: u8) {
-        println!("Dxyn - DRW Vx, Vy, nibble");
-        // let data = self.memory[self.i..self.i+n];
-        todo!("Dxyn - drw_vx_vy_nibble")
+        for byte in 0..n {
+            let y_axis = ((self.v[y as usize] + byte) % 32) as usize;
+            for bit in 0..8 {
+                let x_axis = ((self.v[x as usize] + bit) % 64) as usize;
+                let value = self.memory[self.i as usize + byte as usize] >> (7 - bit);
+                self.v[0xF] = self.display[y_axis][x_axis] as u8 & value;
+                self.display[y_axis][x_axis] = self.display[y_axis][x_axis] ^ (value == 1);
+            }
+        }
     }
 
-    // Ex9E
-    // Checks the keyboard, and if the key corresponding
-    // to the value of Vx is currently in the down position, PC is increased by 2.
+    // Ex9E - SKP Vx
     fn skp_vx(&mut self, x: u8) {
-        println!("Ex9E - SKP Vx");
-        if self.keyboard[self.v[x as usize] as usize] { self.pc += 2; }
+        if self.keyboard[self.v[x as usize] as usize] { self.pc += 4; }
     }
 
-    // ExA1
-    // Checks the keyboard, and if the key
-    // corresponding to the value of Vx is currently in the up position, PC is increased by 2.
+    // ExA1 - SKNP Vx
     fn sknp_vx(&mut self, x: u8) {
-        println!("ExA1 - SKNP Vx");
-        if !self.keyboard[self.v[x as usize] as usize] { self.pc += 1; }
+        if !self.keyboard[self.v[x as usize] as usize] { self.pc += 2; }
     }
 
-    // Fx07
-    // The value of DT is placed into Vx.
+    // Fx07 - LD Vx, DT
     fn ld_vx_dt(&mut self, x: u8) {
-        println!("Fx07 - LD Vx, DT");
         self.v[x as usize] = self.dt;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Fx0A
-    // All execution stops until a key is pressed, then the
-    // value of that key is stored in Vx.
+    // Fx0A - LD Vx, K
     fn ld_vx_k(&mut self, x: u8) {
         let mut key = String::new();
         loop {
@@ -380,65 +323,49 @@ impl Chip8 {
         self.pc += 2;
     }
 
-    // Fx15
-    // Delay Timer is set equal to the value of Vx.
+    // Fx15 - LD DT, Vx
     fn ld_dt_vx(&mut self, x: u8) {
-        println!("Fx15 - LD DT, Vx");
         self.dt = self.v[x as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Fx18
-    // Sound Timer is set equal to the value of Vx.
+    // Fx18 - LD ST, Vx
     fn ld_st_vx(&mut self, x: u8) {
-        println!("Fx18 - LD ST, Vx");
         self.st = self.v[x as usize];
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Fx1E
-    // The values of I and Vx are added, and the results are stored in I.
+    // Fx1E - ADD I, Vx
     fn add_i_vx(&mut self, x: u8) {
-        println!("Fx1E - ADD I, Vx");
         self.i += self.v[x as usize] as u16;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Fx29
-    // The value of I is set to the location for the hexadecimal sprite
-    // corresponding to the value of Vx.
+    // Fx29 - LD F, Vx
     fn ld_f_vx(&mut self, x: u8) {
-        println!("Fx29 - LD F, Vx");
-        todo!("Fx29 - ld_f_vx")
+        self.i = self.memory[(self.v[x as usize] * 5) as usize] as u16;
+        self.pc += 2;
     }
 
-    // Fx33
-    // The interpreter takes the decimal
-    // value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1, and
-    // the ones digit at location I+2.
+    // Fx33 - LD B, Vx
     fn ld_b_vx(&mut self, x: u8) {
-        println!("Fx33 - LD B, Vx");
         let data = self.v[x as usize];
         self.memory[self.i as usize] = data / 100;
         self.memory[(self.i + 1) as usize] = (data % 100) / 10;
         self.memory[(self.i + 2) as usize] = data % 10;
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Fx55
-    // Stores V0 to VX in memory starting at address I. I is then set to I + x + 1.
+    // Fx55 - LD [I], Vx
     fn ld_i_vx(&mut self, x: u8) {
-        println!("Fx55 - LD [I], Vx");
         for j in 0..x { self.memory[(self.i + j as u16) as usize] = self.v[j as usize]; }
-        self.pc += 1;
+        self.pc += 2;
     }
 
-    // Fx65
-    // Fills V0 to VX with values from memory starting at address I. I is then set to I + x + 1.
+    // Fx65 - LD Vx, [I]
     fn ld_vx_i(&mut self, x: u8) {
-        println!("Fx65 - LD Vx, [I]");
         for j in 0..x { self.v[j as usize] = self.memory[(self.i + j as u16) as usize]; }
-        self.pc += 1;
+        self.pc += 2;
     }
 }
 
