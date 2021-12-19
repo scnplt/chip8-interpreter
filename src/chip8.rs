@@ -1,6 +1,7 @@
-use std::io;
+use std::{collections::HashSet, time::Duration};
 
 use rand::Rng;
+use sdl2::{event::Event, keyboard::Keycode};
 
 const ADDR_START_PROGRAM: u16 = 0x200;
 
@@ -20,10 +21,10 @@ const FONT_SET: [u8; 80] = [
     0xF0, 0x80, 0x80, 0x80, 0xF0, // C
     0xE0, 0x90, 0x90, 0x90, 0xE0, // D
     0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
-pub struct Chip8 {
+pub struct Chip8<'a> {
     // V0 - VF
     pub v: [u8; 16],
 
@@ -55,10 +56,12 @@ pub struct Chip8 {
 
     // Keyboard
     pub keyboard: [bool; 16],
+
+    sdl: &'a sdl2::Sdl,
 }
 
-impl Chip8 {
-    pub fn new() -> Chip8 {
+impl Chip8<'static> {
+    pub fn new(sdl_context: &sdl2::Sdl) -> Chip8 {
         let mut mem = [0; 4096];
         mem[..80].copy_from_slice(&FONT_SET);
 
@@ -73,6 +76,7 @@ impl Chip8 {
             pc: ADDR_START_PROGRAM,
             memory: mem,
             keyboard: [false; 16],
+            sdl: sdl_context,
         }
     }
 
@@ -81,7 +85,7 @@ impl Chip8 {
             ((code & 0xF000) >> 12) as u8,
             ((code & 0x0F00) >> 8) as u8,
             ((code & 0x00F0) >> 4) as u8,
-            (code & 0x000F) as u8
+            (code & 0x000F) as u8,
         );
 
         // A 12-bit value, the lowest 12 bits of the instruction
@@ -311,16 +315,27 @@ impl Chip8 {
 
     // Fx0A - LD Vx, K
     fn ld_vx_k(&mut self, x: u8) {
-        let mut key = String::new();
-        loop {
-            io::stdin().read_line(&mut key).expect("Invalid input");
-            let key_value = get_key_value(key.to_uppercase().as_str());
-            if key_value != None {
-                self.v[x as usize] = key_value.unwrap();
-                break;
+        let mut events = self.sdl.event_pump().unwrap();
+        'event: loop {
+            for event in events.poll_iter() { if let Event::Quit { .. } = event { break 'event; } }
+
+            let keys: HashSet<Keycode> = events
+                .keyboard_state()
+                .pressed_scancodes()
+                .filter_map(Keycode::from_scancode)
+                .collect();
+
+            for key_code in keys.iter() {
+                let key_value = get_key_value(*key_code);
+                if key_value != None {
+                    self.v[x as usize] = key_value.unwrap();
+                    self.pc += 2;
+                    break 'event;
+                }
             }
+
+            std::thread::sleep(Duration::from_millis(100));
         }
-        self.pc += 2;
     }
 
     // Fx15 - LD DT, Vx
@@ -379,24 +394,24 @@ impl Chip8 {
 // +---+---+---+---+    +---+---+---+---+
 // | A | 0 | B | F |    | Z | X | C | V |
 // +---+---+---+---+    +---+---+---+---+
-fn get_key_value(input: &str) -> Option<u8> {
-    match input {
-        "1" => Some(1),
-        "2" => Some(2),
-        "3" => Some(3),
-        "4" => Some(0xC),
-        "Q" => Some(4),
-        "W" => Some(5),
-        "E" => Some(6),
-        "R" => Some(0xD),
-        "A" => Some(7),
-        "S" => Some(8),
-        "D" => Some(9),
-        "F" => Some(0xE),
-        "Z" => Some(0xA),
-        "X" => Some(0),
-        "C" => Some(0xB),
-        "V" => Some(0xF),
+fn get_key_value(key: Keycode) -> Option<u8> {
+    match key {
+        Keycode::Num1 => Some(1),
+        Keycode::Num2 => Some(2),
+        Keycode::Num3 => Some(3),
+        Keycode::Num4 => Some(0xC),
+        Keycode::Q => Some(4),
+        Keycode::W => Some(5),
+        Keycode::E => Some(6),
+        Keycode::R => Some(0xD),
+        Keycode::A => Some(7),
+        Keycode::S => Some(8),
+        Keycode::D => Some(9),
+        Keycode::F => Some(0xE),
+        Keycode::Z => Some(0xA),
+        Keycode::X => Some(0),
+        Keycode::C => Some(0xB),
+        Keycode::V => Some(0xF),
         _ => None,
     }
 }
