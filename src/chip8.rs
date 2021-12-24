@@ -1,9 +1,22 @@
-use std::{collections::HashSet, time::Duration};
+use std::fs::File;
+use std::io::Read;
+use std::thread::sleep;
+use std::time::Duration;
 
-use rand::Rng;
-use sdl2::{event::Event, keyboard::Keycode};
+use sdl2::{
+    event::Event,
+    EventPump,
+    keyboard::Keycode,
+    pixels::Color,
+    rect::Rect,
+    render::Canvas,
+    Sdl,
+    video::Window,
+};
 
-const ADDR_START_PROGRAM: u16 = 0x200;
+use crate::keypad::Keypad;
+
+const ADDR_PROGRAM_START: u16 = 0x200;
 
 const FONT_SET: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -24,63 +37,131 @@ const FONT_SET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
-pub struct Chip8<'a> {
+const FRAME_WIDTH: usize = 64;
+const FRAME_HEIGHT: usize = 32;
+
+const WINDOW_TITLE: &str = "Chip-8 Emulator";
+const WINDOW_WIDTH: u32 = (FRAME_WIDTH as u32) * 8;
+const WINDOW_HEIGHT: u32 = (FRAME_HEIGHT as u32) * 8;
+
+const RGB_BLACK: (u8, u8, u8) = (0, 0, 0);
+const RGB_WHITE: (u8, u8, u8) = (255, 255, 255);
+
+pub struct Chip8 {
     // V0 - VF
-    pub v: [u8; 16],
+    v: [u8; 16],
 
     // Index register
-    pub i: u16,
+    i: u16,
 
     // Stack
-    pub stack: [u8; 64],
+    stack: [u16; 32],
 
     // Stack pointer
-    pub sp: u8,
+    sp: u8,
 
     // Delay timer
-    pub dt: u8,
+    dt: u8,
 
     // Sound timer
-    pub st: u8,
+    st: u8,
 
     // Display
-    pub display: [[bool; 64]; 32],
+    frame: [[u8; FRAME_WIDTH]; FRAME_HEIGHT],
 
     // Program counter
-    pub pc: u16,
+    pc: u16,
 
     // Memory
-    // 0x000 - 0x080 -> Font Set
-    // 0x200 - 0xFFF -> Program/Data Space
-    pub memory: [u8; 4096],
+    memory: [u8; 4096],
 
-    // Keyboard
-    pub keyboard: [bool; 16],
+    // Keypad
+    keypad: Keypad,
 
-    sdl: &'a sdl2::Sdl,
+    // Canvas
+    canvas: Canvas<Window>,
 }
 
-impl Chip8<'static> {
-    pub fn new(sdl_context: &sdl2::Sdl) -> Chip8 {
-        let mut mem = [0; 4096];
-        mem[..80].copy_from_slice(&FONT_SET);
+impl Chip8 {
+    pub fn new(sdl: &Sdl) -> Self {
+        let mut memory = [0; 4096];
+        memory[..80].copy_from_slice(&FONT_SET);
 
-        Chip8 {
+        let canvas = sdl.video().expect("Could not create Video Subsystem!")
+            .window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
+            .build().expect("Could not create Window!")
+            .into_canvas().build().expect("Could not create Canvas!");
+
+        Self {
             v: [0; 16],
-            i: 0,
-            stack: [0; 64],
+            i: ADDR_PROGRAM_START,
+            stack: [0; 32],
             sp: 0,
             dt: 0,
             st: 0,
-            display: [[false; 64]; 32],
-            pc: ADDR_START_PROGRAM,
-            memory: mem,
-            keyboard: [false; 16],
-            sdl: sdl_context,
+            frame: [[0; FRAME_WIDTH]; FRAME_HEIGHT],
+            pc: ADDR_PROGRAM_START,
+            memory,
+            keypad: Keypad::new(),
+            canvas,
         }
     }
 
-    pub fn run_op_code(&mut self, code: u16) {
+    pub fn load_rom(&mut self, path: &str) {
+        let file = File::open(path).expect("Could not read rom!");
+        for (i, byte) in file.bytes().enumerate() {
+            let addr = ADDR_PROGRAM_START as usize + i;
+            self.memory[addr] = byte.expect("Could not read rom!");
+        }
+    }
+
+    pub fn start_cycle(&mut self, events: &mut EventPump) {
+        let mut frame = 0u8;
+        'cycle: loop {
+            for event in events.poll_iter() {
+                if let Event::Quit { .. } = event { break 'cycle; }
+            }
+
+            self.update_screen();
+
+            let keys: Vec<Keycode> = events.keyboard_state()
+                .pressed_scancodes().filter_map(Keycode::from_scancode).collect();
+
+            for key in keys { self.keypad.down_key(key); }
+
+            let pc = self.pc as usize;
+            let op_code = ((self.memory[pc] as u16) << 8) | self.memory[pc + 1] as u16;
+            self.run_op_code(op_code);
+
+            if self.dt > 0 { self.dt -= 1; }
+            if self.st > 0 { self.st -= 1; }
+
+            if frame >= 3 {
+                frame = 0;
+                self.keypad.up_key();
+            }
+
+            frame += 1;
+            sleep(Duration::from_millis(4));
+        }
+    }
+
+    fn update_screen(&mut self) {
+        for y in 0..FRAME_HEIGHT {
+            for x in 0..FRAME_WIDTH {
+                let rgb = if self.frame[y][x] == 1 { RGB_WHITE } else { RGB_BLACK };
+                let color = Color::from(rgb);
+
+                self.canvas.set_draw_color(color);
+                self.canvas.fill_rect(self.get_pixel_rect(x as i32 * 8, y as i32 * 8)).unwrap();
+            }
+        }
+        self.canvas.present();
+    }
+
+    fn get_pixel_rect(&self, x: i32, y: i32) -> Rect { Rect::new(x, y, WINDOW_WIDTH, WINDOW_HEIGHT) }
+
+    fn run_op_code(&mut self, code: u16) {
         let (op1, op2, op3, op4) = (
             ((code & 0xF000) >> 12) as u8,
             ((code & 0x0F00) >> 8) as u8,
@@ -138,19 +219,19 @@ impl Chip8<'static> {
             (0xF, _, 0x3, 0x3) => self.ld_b_vx(x),
             (0xF, _, 0x5, 0x5) => self.ld_i_vx(x),
             (0xF, _, 0x6, 0x5) => self.ld_vx_i(x),
-            _ => println!("undefined"),
+            _ => self.pc += 2,
         }
     }
 
     // 00EE - RET
     fn ret(&mut self) {
-        self.pc = self.stack[self.sp as usize] as u16;
-        if self.sp != 0 { self.sp -= 1; }
+        self.sp -= 1;
+        self.pc = self.stack[self.sp as usize] as u16 + 2;
     }
 
     // 00E0 - CLS
     fn cls(&mut self) {
-        self.display = [[false; 64]; 32];
+        self.frame = [[0; FRAME_WIDTH]; FRAME_HEIGHT];
         self.pc += 2;
     }
 
@@ -161,24 +242,24 @@ impl Chip8<'static> {
 
     // 2nnn - CALL addr
     fn call_addr(&mut self, nnn: u16) {
+        self.stack[self.sp as usize] = self.pc;
         self.sp += 1;
-        self.stack[self.sp as usize] = self.pc as u8;
         self.pc = nnn;
     }
 
     // 3xkk - SE Vx, byte
     fn se_vx_byte(&mut self, x: u8, kk: u8) {
-        if self.v[x as usize] == kk { self.pc += 4; }
+        self.pc += if self.v[x as usize] == kk { 4 } else { 2 };
     }
 
     // 4xkk - SNE Vx, byte
     fn sne_vx_byte(&mut self, x: u8, kk: u8) {
-        if self.v[x as usize] != kk { self.pc += 4; }
+        self.pc += if self.v[x as usize] != kk { 4 } else { 2 };
     }
 
     // 5xy0 - SE Vx, Vy
     fn se_vx_vy(&mut self, x: u8, y: u8) {
-        if self.v[x as usize] == self.v[y as usize] { self.pc += 4; }
+        self.pc += if self.v[x as usize] == self.v[y as usize] { 4 } else { 2 };
     }
 
     // 6xkk - LD Vx, byte
@@ -189,7 +270,7 @@ impl Chip8<'static> {
 
     // 7xkk - ADD Vx, byte
     fn add_vx_byte(&mut self, x: u8, kk: u8) {
-        self.v[x as usize] += kk;
+        self.v[x as usize] = self.v[x as usize].overflowing_add(kk).0;
         self.pc += 2;
     }
 
@@ -219,43 +300,45 @@ impl Chip8<'static> {
 
     // 8xy4 - ADD Vx, Vy
     fn add_vx_vy(&mut self, x: u8, y: u8) {
-        let sum = self.v[x as usize] as u16 + self.v[y as usize] as u16;
-        self.v[x as usize] = sum as u8;
-        self.v[0xF] = (sum > 255) as u8;
+        let (sum, overflow) = self.v[x as usize].overflowing_add(self.v[y as usize]);
+        self.v[x as usize] = sum;
+        self.v[0xF] = overflow as u8;
         self.pc += 2;
     }
 
     // 8xy5 - SUB Vx, Vy
     fn sub_vx_vy(&mut self, x: u8, y: u8) {
-        self.v[0xf] = (self.v[x as usize] > self.v[y as usize]) as u8;
-        self.v[x as usize] -= self.v[y as usize];
+        let (result, overflow) = self.v[x as usize].overflowing_sub(self.v[y as usize]);
+        self.v[x as usize] = result;
+        self.v[0xF] = !overflow as u8;
         self.pc += 2;
     }
 
     // 8xy6 - SHR Vx {, Vy}
     fn shr_vx_vy(&mut self, x: u8) {
-        self.v[0xf] = (self.v[x as usize] & 0b1 == 1) as u8;
+        self.v[0xF] = (self.v[x as usize] & 1 == 1) as u8;
         self.v[x as usize] >>= 1;
         self.pc += 2;
     }
 
     // 8xy7 - SUBN Vx, Vy
     fn subn_vx_vy(&mut self, x: u8, y: u8) {
-        self.v[0xf] = (self.v[y as usize] > self.v[x as usize]) as u8;
-        self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+        let (result, overflow) = self.v[y as usize].overflowing_sub(self.v[x as usize]);
+        self.v[0xF] = !overflow as u8;
+        self.v[x as usize] = result;
         self.pc += 2;
     }
 
     // 8xyE - SHL Vx {, Vy}
     fn shl_vx_vy(&mut self, x: u8) {
-        self.v[0xf] = (self.v[x as usize] >> 7 == 1) as u8;
+        self.v[0xF] = (self.v[x as usize] >> 7 == 1) as u8;
         self.v[x as usize] <<= 1;
         self.pc += 2;
     }
 
     // 9xy0 - SNE Vx, Vy
     fn sne_vx_vy(&mut self, x: u8, y: u8) {
-        if self.v[x as usize] != self.v[y as usize] { self.pc += 4; }
+        self.pc += if self.v[x as usize] != self.v[y as usize] { 4 } else { 2 };
     }
 
     // Annn - LD I, addr
@@ -271,40 +354,34 @@ impl Chip8<'static> {
 
     // Cxkk - RND Vx, byte
     fn rnd_vx_byte(&mut self, x: u8, kk: u8) {
-        let random_byte: u8 = rand::thread_rng().gen_range(0..255);
-        self.v[x as usize] = random_byte & kk;
+        self.v[x as usize] = rand::random::<u8>() & kk;
         self.pc += 2;
     }
 
     // Dxyn - DRW Vx, Vy, nibble
-    // ............................................
-    // : display  ^  value : new_display : erased :
-    // :...................:.............:........:
-    // :       0 :       0 :           0 :      0 :
-    // :       0 :       1 :           1 :      0 :
-    // :       1 :       0 :           1 :      0 :
-    // :       1 :       1 :           0 :      1 :
-    // :.........:.........:.............:........:
     fn drw_vx_vy_nibble(&mut self, x: u8, y: u8, n: u8) {
+        self.v[0xF] = 0;
         for byte in 0..n {
-            let y_axis = ((self.v[y as usize] + byte) % 32) as usize;
+            let y = ((self.v[y as usize] + byte) % 32) as usize;
+            let sprite = self.memory[(self.i + byte as u16) as usize];
             for bit in 0..8 {
-                let x_axis = ((self.v[x as usize] + bit) % 64) as usize;
-                let value = self.memory[self.i as usize + byte as usize] >> (7 - bit);
-                self.v[0xF] = self.display[y_axis][x_axis] as u8 & value;
-                self.display[y_axis][x_axis] = self.display[y_axis][x_axis] ^ (value == 1);
+                let x = ((self.v[x as usize] + bit) % 64) as usize;
+                let pixel = (sprite >> (7 - bit)) & 1;
+                self.v[0xF] |= self.frame[y][x] & pixel;
+                self.frame[y][x] ^= pixel;
             }
         }
+        self.pc += 2;
     }
 
     // Ex9E - SKP Vx
     fn skp_vx(&mut self, x: u8) {
-        if self.keyboard[self.v[x as usize] as usize] { self.pc += 4; }
+        self.pc += if self.keypad.is_pressed(self.v[x as usize]) { 4 } else { 2 };
     }
 
     // ExA1 - SKNP Vx
     fn sknp_vx(&mut self, x: u8) {
-        if !self.keyboard[self.v[x as usize] as usize] { self.pc += 2; }
+        self.pc += if !self.keypad.is_pressed(self.v[x as usize]) { 4 } else { 2 };
     }
 
     // Fx07 - LD Vx, DT
@@ -315,26 +392,9 @@ impl Chip8<'static> {
 
     // Fx0A - LD Vx, K
     fn ld_vx_k(&mut self, x: u8) {
-        let mut events = self.sdl.event_pump().unwrap();
-        'event: loop {
-            for event in events.poll_iter() { if let Event::Quit { .. } = event { break 'event; } }
-
-            let keys: HashSet<Keycode> = events
-                .keyboard_state()
-                .pressed_scancodes()
-                .filter_map(Keycode::from_scancode)
-                .collect();
-
-            for key_code in keys.iter() {
-                let key_value = get_key_value(*key_code);
-                if key_value != None {
-                    self.v[x as usize] = key_value.unwrap();
-                    self.pc += 2;
-                    break 'event;
-                }
-            }
-
-            std::thread::sleep(Duration::from_millis(100));
+        if let Some(key) = self.keypad.get_key() {
+            self.v[x as usize] = key;
+            self.pc += 2;
         }
     }
 
@@ -373,45 +433,445 @@ impl Chip8<'static> {
 
     // Fx55 - LD [I], Vx
     fn ld_i_vx(&mut self, x: u8) {
-        for j in 0..x { self.memory[(self.i + j as u16) as usize] = self.v[j as usize]; }
+        for j in 0..=x { self.memory[(self.i + j as u16) as usize] = self.v[j as usize]; }
+        self.i += x as u16 + 1;
         self.pc += 2;
     }
 
     // Fx65 - LD Vx, [I]
     fn ld_vx_i(&mut self, x: u8) {
-        for j in 0..x { self.v[j as usize] = self.memory[(self.i + j as u16) as usize]; }
+        for j in 0..=x { self.v[j as usize] = self.memory[(self.i + j as u16) as usize]; }
+        self.i += x as u16 + 1;
         self.pc += 2;
     }
 }
 
-// Original             Current
-// +---+---+---+---+    +---+---+---+---+
-// | 1 | 2 | 3 | C |    | 1 | 2 | 3 | 4 |
-// +---+---+---+---+    +---+---+---+---+
-// | 4 | 5 | 6 | D |    | Q | W | E | R |
-// +---+---+---+---+    +---+---+---+---+
-// | 7 | 8 | 9 | E |    | A | S | D | F |
-// +---+---+---+---+    +---+---+---+---+
-// | A | 0 | B | F |    | Z | X | C | V |
-// +---+---+---+---+    +---+---+---+---+
-fn get_key_value(key: Keycode) -> Option<u8> {
-    match key {
-        Keycode::Num1 => Some(1),
-        Keycode::Num2 => Some(2),
-        Keycode::Num3 => Some(3),
-        Keycode::Num4 => Some(0xC),
-        Keycode::Q => Some(4),
-        Keycode::W => Some(5),
-        Keycode::E => Some(6),
-        Keycode::R => Some(0xD),
-        Keycode::A => Some(7),
-        Keycode::S => Some(8),
-        Keycode::D => Some(9),
-        Keycode::F => Some(0xE),
-        Keycode::Z => Some(0xA),
-        Keycode::X => Some(0),
-        Keycode::C => Some(0xB),
-        Keycode::V => Some(0xF),
-        _ => None,
+/*#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_00e0() {
+        let mut chip = Chip8::new();
+        chip.frame = [[1; 64]; 32];
+        chip.run_op_code(0x00E0);
+        assert_eq!(chip.frame, [[0; 64]; 32]);
+        assert_eq!(chip.pc, 0x202)
     }
-}
+
+    #[test]
+    fn test_00ee() {
+        let mut chip = Chip8::new();
+        chip.sp = 2;
+        chip.stack = [3; 32];
+        chip.run_op_code(0x00EE);
+        assert_eq!(chip.sp, 1);
+        assert_eq!(chip.pc, 3 + 2);
+    }
+
+    #[test]
+    fn test_1nnn() {
+        let mut chip = Chip8::new();
+        chip.run_op_code(0x1444);
+        assert_eq!(chip.pc, 0x444);
+    }
+
+    #[test]
+    fn test_2nnn() {
+        let mut chip = Chip8::new();
+        chip.run_op_code(0x2456);
+
+        assert_eq!(chip.sp, 1);
+        assert_eq!(chip.pc, 0x456);
+        assert_eq!(chip.stack[(chip.sp - 1) as usize], 0x200)
+    }
+
+    #[test]
+    fn test_3xkk() {
+        let mut chip = Chip8::new();
+
+        // Vx == kk
+        chip.v[2] = 0x12;
+        chip.run_op_code(0x3212);
+        assert_eq!(chip.pc, 0x204);
+
+        // Vx != kk
+        chip.v[2] = 0x11;
+        chip.run_op_code(0x3212);
+        assert_eq!(chip.pc, 0x206)
+    }
+
+    #[test]
+    fn test_4xkk() {
+        let mut chip = Chip8::new();
+
+        // Vx != kk
+        chip.v[2] = 0x12;
+        chip.run_op_code(0x4211);
+        assert_eq!(chip.pc, 0x204);
+
+        // Vx == kk
+        chip.v[2] = 0x11;
+        chip.run_op_code(0x4211);
+        assert_eq!(chip.pc, 0x206);
+    }
+
+    #[test]
+    fn test_5xy0() {
+        let mut chip = Chip8::new();
+
+        // Vx == Vy
+        chip.v[2] = 0x2;
+        chip.v[3] = 0x2;
+        chip.run_op_code(0x5230);
+        assert_eq!(chip.pc, 0x204);
+
+        // Vx != Vy
+        chip.v[3] = 0x3;
+        chip.run_op_code(0x5230);
+        assert_eq!(chip.pc, 0x206);
+    }
+
+    #[test]
+    fn test_6xkk() {
+        let mut chip = Chip8::new();
+
+        chip.run_op_code(0x6233);
+        assert_eq!(chip.v[2], 0x33);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_7xkk() {
+        let mut chip = Chip8::new();
+
+        chip.v[2] = 0x2;
+        chip.run_op_code(0x7201);
+        assert_eq!(chip.v[2], 0x3);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_8xy0() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0x2;
+        chip.v[2] = 0x3;
+        chip.run_op_code(0x8120);
+        assert_eq!(chip.v[1], 0x3);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_8xy1() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0xF0;
+        chip.v[2] = 0x0F;
+        chip.run_op_code(0x8121);
+        assert_eq!(chip.v[1], 0xFF);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_8xy2() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0xFF;
+        chip.v[2] = 0x0F;
+        chip.run_op_code(0x8122);
+        assert_eq!(chip.v[1], 0x0F);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_8xy3() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0xF0;
+        chip.v[2] = 0xFF;
+        chip.run_op_code(0x8123);
+        assert_eq!(chip.v[1], 0x0F);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_8xy4() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0xAA;
+        chip.v[2] = 0xAA;
+        chip.run_op_code(0x8124);
+        assert_eq!(chip.v[1], 0x54);
+        assert_eq!(chip.v[0xF], 1);
+        assert_eq!(chip.pc, 0x202);
+
+        chip.v[1] = 0x11;
+        chip.v[2] = 0x22;
+        chip.run_op_code(0x8124);
+        assert_eq!(chip.v[1], 0x33);
+        assert_eq!(chip.v[0xF], 0);
+        assert_eq!(chip.pc, 0x204);
+    }
+
+    #[test]
+    fn test_8xy5() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0xFF;
+        chip.v[2] = 0x11;
+        chip.run_op_code(0x8125);
+        assert_eq!(chip.v[1], 0xEE);
+        assert_eq!(chip.v[0xF], 1);
+        assert_eq!(chip.pc, 0x202);
+
+        chip.v[1] = 0x11;
+        chip.v[2] = 0xFF;
+        chip.run_op_code(0x8125);
+        assert_eq!(chip.v[1], 0x12);
+        assert_eq!(chip.v[0xF], 0);
+        assert_eq!(chip.pc, 0x204);
+    }
+
+    #[test]
+    fn test_8xy6() {
+        let mut chip = Chip8::new();
+
+        chip.v[5] = 14;
+        chip.run_op_code(0x8506);
+        assert_eq!(chip.v[0xF], 0);
+        assert_eq!(chip.v[5], 7);
+    }
+
+    #[test]
+    fn test_8xy7() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0x1;
+        chip.v[2] = 0x2;
+        chip.run_op_code(0x8127);
+        assert_eq!(chip.v[0xF], 1);
+        assert_eq!(chip.v[1], 0x1);
+        assert_eq!(chip.pc, 0x202);
+
+        chip.v[1] = 0x2;
+        chip.v[2] = 0x1;
+        chip.run_op_code(0x8127);
+        assert_eq!(chip.v[0xF], 0);
+        assert_eq!(chip.v[1], 0xFF);
+        assert_eq!(chip.pc, 0x204);
+    }
+
+    #[test]
+    fn test_8xye() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 0xAA;
+        chip.run_op_code(0x810E);
+        assert_eq!(chip.v[0xF], 1);
+        assert_eq!(chip.v[1], 0x54);
+        assert_eq!(chip.pc, 0x202);
+
+        chip.run_op_code(0x810E);
+        assert_eq!(chip.v[0xF], 0);
+        assert_eq!(chip.v[1], 0xA8);
+        assert_eq!(chip.pc, 0x204);
+    }
+
+    #[test]
+    fn test_9xy0() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 1;
+        chip.v[2] = 2;
+        chip.run_op_code(0x9120);
+        assert_eq!(chip.pc, 0x204);
+
+        chip.v[1] = 2;
+        chip.run_op_code(0x9120);
+        assert_eq!(chip.pc, 0x206);
+    }
+
+    #[test]
+    fn test_annn() {
+        let mut chip = Chip8::new();
+
+        chip.run_op_code(0xA123);
+        assert_eq!(chip.i, 0x123);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_bnnn() {
+        let mut chip = Chip8::new();
+
+        chip.v[0] = 2;
+        chip.run_op_code(0xB123);
+        assert_eq!(chip.pc, 0x125);
+    }
+
+    #[test]
+    fn test_cxkk() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 1;
+        chip.run_op_code(0xC1AA);
+        assert_ne!(chip.v[1], 1);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_dxyn() {
+        let mut chip = Chip8::new();
+
+        chip.i = 0x400;
+        chip.v[0] = 2;
+        chip.v[1] = 1;
+        chip.memory[0x400] = 0b11101010;
+        chip.memory[0x401] = 0b10101100;
+        chip.memory[0x402] = 0b10101010;
+        chip.memory[0x403] = 0b11101001;
+        chip.run_op_code(0xD014);
+        assert_eq!(chip.frame[1][2..10], [1, 1, 1, 0, 1, 0, 1, 0]);
+        assert_eq!(chip.frame[2][2..10], [1, 0, 1, 0, 1, 1, 0, 0]);
+        assert_eq!(chip.frame[3][2..10], [1, 0, 1, 0, 1, 0, 1, 0]);
+        assert_eq!(chip.frame[4][2..10], [1, 1, 1, 0, 1, 0, 0, 1]);
+        assert_eq!(chip.v[0xF], 0);
+        assert_eq!(chip.pc, 0x202);
+
+        chip.run_op_code(0xD004);
+        assert_eq!(chip.v[0xF], 1);
+        assert_eq!(chip.pc, 0x204);
+    }
+
+    #[test]
+    fn test_ex9e() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 1;
+        chip.keypad.down_key(Keycode::Num1);
+        chip.run_op_code(0xE19E);
+        assert_eq!(chip.pc, 0x204);
+
+        chip.keypad.up_key();
+        chip.run_op_code(0xE19E);
+        assert_eq!(chip.pc, 0x206);
+    }
+
+    #[test]
+    fn test_exa1() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 1;
+        chip.run_op_code(0xE1A1);
+        assert_eq!(chip.pc, 0x204);
+
+        chip.keypad.down_key(Keycode::Num1);
+        chip.run_op_code(0xE1A1);
+        assert_eq!(chip.pc, 0x206);
+    }
+
+    #[test]
+    fn test_fx07() {
+        let mut chip = Chip8::new();
+
+        chip.dt = 2;
+        chip.run_op_code(0xF107);
+        assert_eq!(chip.v[1], 2);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx0a() {
+        let mut chip = Chip8::new();
+
+        chip.keypad.down_key(Keycode::Num1);
+        chip.run_op_code(0xF10A);
+        assert_eq!(chip.v[1], 1);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx15() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 3;
+        chip.run_op_code(0xF115);
+        assert_eq!(chip.dt, 3);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx18() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 3;
+        chip.run_op_code(0xF118);
+        assert_eq!(chip.st, 3);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx1e() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 2;
+        chip.run_op_code(0xF11E);
+        assert_eq!(chip.i, 0x202);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx29() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 1;
+        chip.memory[5] = 0x11;
+        chip.run_op_code(0xF129);
+        assert_eq!(chip.i, 0x11);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx33() {
+        let mut chip = Chip8::new();
+
+        chip.v[1] = 123;
+        chip.run_op_code(0xF133);
+        assert_eq!(chip.memory[chip.i as usize], 1);
+        assert_eq!(chip.memory[chip.i as usize + 1], 2);
+        assert_eq!(chip.memory[chip.i as usize + 2], 3);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx55() {
+        let mut chip = Chip8::new();
+        let i = chip.i as usize;
+
+        chip.v[0] = 0;
+        chip.v[1] = 1;
+        chip.v[2] = 2;
+        chip.run_op_code(0xF255);
+        assert_eq!(chip.memory[i], 0);
+        assert_eq!(chip.memory[i + 1], 1);
+        assert_eq!(chip.memory[i + 2], 2);
+        assert_eq!(chip.i, 0x203);
+        assert_eq!(chip.pc, 0x202);
+    }
+
+    #[test]
+    fn test_fx65() {
+        let mut chip = Chip8::new();
+
+        chip.memory[chip.i as usize] = 0;
+        chip.memory[chip.i as usize + 1] = 1;
+        chip.memory[chip.i as usize + 2] = 2;
+        chip.run_op_code(0xF265);
+        assert_eq!(chip.v[0], 0);
+        assert_eq!(chip.v[1], 1);
+        assert_eq!(chip.v[2], 2);
+        assert_eq!(chip.i, 0x203);
+        assert_eq!(chip.pc, 0x202);
+    }
+}*/
