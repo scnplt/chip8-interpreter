@@ -254,7 +254,7 @@ impl Chip8 {
 
     // 4xkk - SNE Vx, byte
     fn sne_vx_byte(&mut self, x: u8, kk: u8) {
-        self.pc += if self.v[x as usize] != kk { 4 } else { 2 };
+        self.pc += if self.v[x as usize] == kk { 2 } else { 4 };
     }
 
     // 5xy0 - SE Vx, Vy
@@ -338,7 +338,7 @@ impl Chip8 {
 
     // 9xy0 - SNE Vx, Vy
     fn sne_vx_vy(&mut self, x: u8, y: u8) {
-        self.pc += if self.v[x as usize] != self.v[y as usize] { 4 } else { 2 };
+        self.pc += if self.v[x as usize] == self.v[y as usize] { 2 } else { 4 };
     }
 
     // Annn - LD I, addr
@@ -381,7 +381,7 @@ impl Chip8 {
 
     // ExA1 - SKNP Vx
     fn sknp_vx(&mut self, x: u8) {
-        self.pc += if !self.keypad.is_pressed(self.v[x as usize]) { 4 } else { 2 };
+        self.pc += if self.keypad.is_pressed(self.v[x as usize]) { 2 } else { 4 };
     }
 
     // Fx07 - LD Vx, DT
