@@ -40,9 +40,11 @@ const FONT_SET: [u8; 80] = [
 const FRAME_WIDTH: usize = 64;
 const FRAME_HEIGHT: usize = 32;
 
+const SCALE: u32 = 10;
+
 const WINDOW_TITLE: &str = "Chip-8 Emulator";
-const WINDOW_WIDTH: u32 = (FRAME_WIDTH as u32) * 8;
-const WINDOW_HEIGHT: u32 = (FRAME_HEIGHT as u32) * 8;
+const WINDOW_WIDTH: u32 = (FRAME_WIDTH as u32) * SCALE;
+const WINDOW_HEIGHT: u32 = (FRAME_HEIGHT as u32) * SCALE;
 
 const RGB_BLACK: (u8, u8, u8) = (0, 0, 0);
 const RGB_WHITE: (u8, u8, u8) = (255, 255, 255);
@@ -87,10 +89,10 @@ impl Chip8 {
         let mut memory = [0; 4096];
         memory[..80].copy_from_slice(&FONT_SET);
 
-        let canvas = sdl.video().expect("Could not create Video Subsystem!")
-            .window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
-            .build().expect("Could not create Window!")
-            .into_canvas().build().expect("Could not create Canvas!");
+        let video_subsystem = sdl.video().expect("Could not create Video Subsystem!");
+        let window_builder = video_subsystem.window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
+            .build().expect("Could not create Window!");
+        let canvas = window_builder.into_canvas().build().expect("Could not create Canvas!");
 
         Self {
             v: [0; 16],
@@ -127,7 +129,10 @@ impl Chip8 {
             let keys: Vec<Keycode> = events.keyboard_state()
                 .pressed_scancodes().filter_map(Keycode::from_scancode).collect();
 
-            for key in keys { self.keypad.down_key(key); }
+            for key in keys {
+                if key == Keycode::Escape { break 'cycle; }
+                self.keypad.down_key(key);
+            }
 
             let pc = self.pc as usize;
             let op_code = ((self.memory[pc] as u16) << 8) | self.memory[pc + 1] as u16;
@@ -136,7 +141,7 @@ impl Chip8 {
             if self.dt > 0 { self.dt -= 1; }
             if self.st > 0 { self.st -= 1; }
 
-            if frame >= 3 {
+            if frame >= 2 {
                 frame = 0;
                 self.keypad.up_key();
             }
@@ -153,13 +158,16 @@ impl Chip8 {
                 let color = Color::from(rgb);
 
                 self.canvas.set_draw_color(color);
-                self.canvas.fill_rect(self.get_pixel_rect(x as i32 * 8, y as i32 * 8)).unwrap();
+                self.canvas.fill_rect(Rect::new(
+                    (x as u32 * SCALE) as i32,
+                    (y as u32 * SCALE) as i32,
+                    SCALE,
+                    SCALE,
+                )).expect("Fill Rect Issue");
             }
         }
         self.canvas.present();
     }
-
-    fn get_pixel_rect(&self, x: i32, y: i32) -> Rect { Rect::new(x, y, WINDOW_WIDTH, WINDOW_HEIGHT) }
 
     fn run_op_code(&mut self, code: u16) {
         let (op1, op2, op3, op4) = (
@@ -219,20 +227,21 @@ impl Chip8 {
             (0xF, _, 0x3, 0x3) => self.ld_b_vx(x),
             (0xF, _, 0x5, 0x5) => self.ld_i_vx(x),
             (0xF, _, 0x6, 0x5) => self.ld_vx_i(x),
-            _ => self.pc += 2,
+            _ => self.next_program(),
         }
     }
 
     // 00EE - RET
     fn ret(&mut self) {
         self.sp -= 1;
-        self.pc = self.stack[self.sp as usize] as u16 + 2;
+        self.pc = self.stack[self.sp as usize] as u16;
+        self.next_program();
     }
 
     // 00E0 - CLS
     fn cls(&mut self) {
         self.frame = [[0; FRAME_WIDTH]; FRAME_HEIGHT];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 1nnn - JP addr
@@ -249,53 +258,56 @@ impl Chip8 {
 
     // 3xkk - SE Vx, byte
     fn se_vx_byte(&mut self, x: u8, kk: u8) {
-        self.pc += if self.v[x as usize] == kk { 4 } else { 2 };
+        self.next_program();
+        if self.v[x as usize] == kk { self.next_program(); }
     }
 
     // 4xkk - SNE Vx, byte
     fn sne_vx_byte(&mut self, x: u8, kk: u8) {
-        self.pc += if self.v[x as usize] == kk { 2 } else { 4 };
+        self.next_program();
+        if self.v[x as usize] != kk { self.next_program(); }
     }
 
     // 5xy0 - SE Vx, Vy
     fn se_vx_vy(&mut self, x: u8, y: u8) {
-        self.pc += if self.v[x as usize] == self.v[y as usize] { 4 } else { 2 };
+        self.next_program();
+        if self.v[x as usize] == self.v[y as usize] { self.next_program(); }
     }
 
     // 6xkk - LD Vx, byte
     fn ld_vx_byte(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = kk;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 7xkk - ADD Vx, byte
     fn add_vx_byte(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = self.v[x as usize].overflowing_add(kk).0;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy0 - LD Vx, Vy
     fn ld_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] = self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy1 - OR Vx, Vy
     fn or_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] |= self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy2 - AND Vx, Vy
     fn and_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] &= self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy3 - XOR Vx, Vy
     fn xor_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] ^= self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy4 - ADD Vx, Vy
@@ -303,7 +315,7 @@ impl Chip8 {
         let (sum, overflow) = self.v[x as usize].overflowing_add(self.v[y as usize]);
         self.v[x as usize] = sum;
         self.v[0xF] = overflow as u8;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy5 - SUB Vx, Vy
@@ -311,14 +323,14 @@ impl Chip8 {
         let (result, overflow) = self.v[x as usize].overflowing_sub(self.v[y as usize]);
         self.v[x as usize] = result;
         self.v[0xF] = !overflow as u8;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy6 - SHR Vx {, Vy}
     fn shr_vx_vy(&mut self, x: u8) {
         self.v[0xF] = (self.v[x as usize] & 1 == 1) as u8;
         self.v[x as usize] >>= 1;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy7 - SUBN Vx, Vy
@@ -326,100 +338,103 @@ impl Chip8 {
         let (result, overflow) = self.v[y as usize].overflowing_sub(self.v[x as usize]);
         self.v[0xF] = !overflow as u8;
         self.v[x as usize] = result;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xyE - SHL Vx {, Vy}
     fn shl_vx_vy(&mut self, x: u8) {
         self.v[0xF] = (self.v[x as usize] >> 7 == 1) as u8;
         self.v[x as usize] <<= 1;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 9xy0 - SNE Vx, Vy
     fn sne_vx_vy(&mut self, x: u8, y: u8) {
-        self.pc += if self.v[x as usize] == self.v[y as usize] { 2 } else { 4 };
+        self.next_program();
+        if self.v[x as usize] != self.v[y as usize] { self.next_program(); }
     }
 
     // Annn - LD I, addr
     fn ld_i_addr(&mut self, nnn: u16) {
         self.i = nnn;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Bnnn - JP V0, addr
     fn jp_v0_addr(&mut self, nnn: u16) {
-        self.pc = self.v[0] as u16 + nnn;
+        self.pc = (self.v[0] as u16 + nnn).min(0xFFF);
     }
 
     // Cxkk - RND Vx, byte
     fn rnd_vx_byte(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = rand::random::<u8>() & kk;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Dxyn - DRW Vx, Vy, nibble
     fn drw_vx_vy_nibble(&mut self, x: u8, y: u8, n: u8) {
         self.v[0xF] = 0;
         for byte in 0..n {
-            let y = ((self.v[y as usize] + byte) % 32) as usize;
+            let y = (self.v[y as usize].overflowing_add(byte).0 % 32) as usize;
             let sprite = self.memory[(self.i + byte as u16) as usize];
             for bit in 0..8 {
-                let x = ((self.v[x as usize] + bit) % 64) as usize;
+                let x = (self.v[x as usize].overflowing_add(bit).0 % 64) as usize;
                 let pixel = (sprite >> (7 - bit)) & 1;
                 self.v[0xF] |= self.frame[y][x] & pixel;
                 self.frame[y][x] ^= pixel;
             }
         }
-        self.pc += 2;
+        self.next_program();
     }
 
     // Ex9E - SKP Vx
     fn skp_vx(&mut self, x: u8) {
-        self.pc += if self.keypad.is_pressed(self.v[x as usize]) { 4 } else { 2 };
+        self.next_program();
+        if self.keypad.is_pressed(self.v[x as usize]) { self.next_program(); }
     }
 
     // ExA1 - SKNP Vx
     fn sknp_vx(&mut self, x: u8) {
-        self.pc += if self.keypad.is_pressed(self.v[x as usize]) { 2 } else { 4 };
+        self.next_program();
+        if !self.keypad.is_pressed(self.v[x as usize]) { self.next_program(); }
     }
 
     // Fx07 - LD Vx, DT
     fn ld_vx_dt(&mut self, x: u8) {
         self.v[x as usize] = self.dt;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx0A - LD Vx, K
     fn ld_vx_k(&mut self, x: u8) {
         if let Some(key) = self.keypad.get_key() {
             self.v[x as usize] = key;
-            self.pc += 2;
+            self.next_program();
         }
     }
 
     // Fx15 - LD DT, Vx
     fn ld_dt_vx(&mut self, x: u8) {
         self.dt = self.v[x as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx18 - LD ST, Vx
     fn ld_st_vx(&mut self, x: u8) {
         self.st = self.v[x as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx1E - ADD I, Vx
     fn add_i_vx(&mut self, x: u8) {
         self.i += self.v[x as usize] as u16;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx29 - LD F, Vx
     fn ld_f_vx(&mut self, x: u8) {
-        self.i = self.memory[(self.v[x as usize] * 5) as usize] as u16;
-        self.pc += 2;
+        self.i = (self.v[x as usize] * 5) as u16;
+        self.next_program();
     }
 
     // Fx33 - LD B, Vx
@@ -428,22 +443,22 @@ impl Chip8 {
         self.memory[self.i as usize] = data / 100;
         self.memory[(self.i + 1) as usize] = (data % 100) / 10;
         self.memory[(self.i + 2) as usize] = data % 10;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx55 - LD [I], Vx
     fn ld_i_vx(&mut self, x: u8) {
-        for j in 0..=x { self.memory[(self.i + j as u16) as usize] = self.v[j as usize]; }
-        self.i += x as u16 + 1;
-        self.pc += 2;
+        for j in 0..=x as u16 { self.memory[(self.i + j) as usize] = self.v[j as usize]; }
+        self.next_program();
     }
 
     // Fx65 - LD Vx, [I]
     fn ld_vx_i(&mut self, x: u8) {
-        for j in 0..=x { self.v[j as usize] = self.memory[(self.i + j as u16) as usize]; }
-        self.i += x as u16 + 1;
-        self.pc += 2;
+        for j in 0..=x as u16 { self.v[j as usize] = self.memory[(self.i + j) as usize]; }
+        self.next_program();
     }
+
+    fn next_program(&mut self) { self.pc = (self.pc + 2).min(0xFFF); }
 }
 
 /*#[cfg(test)]
