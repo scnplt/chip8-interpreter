@@ -418,7 +418,7 @@ impl Chip8 {
 
     // Fx29 - LD F, Vx
     fn ld_f_vx(&mut self, x: u8) {
-        self.i = self.memory[(self.v[x as usize] * 5) as usize] as u16;
+        self.i = (self.v[x as usize] * 5) as u16;
         self.pc += 2;
     }
 
@@ -433,15 +433,13 @@ impl Chip8 {
 
     // Fx55 - LD [I], Vx
     fn ld_i_vx(&mut self, x: u8) {
-        for j in 0..=x { self.memory[(self.i + j as u16) as usize] = self.v[j as usize]; }
-        self.i += x as u16 + 1;
+        for j in 0..=x as u16 { self.memory[(self.i + j) as usize] = self.v[j as usize]; }
         self.pc += 2;
     }
 
     // Fx65 - LD Vx, [I]
     fn ld_vx_i(&mut self, x: u8) {
-        for j in 0..=x { self.v[j as usize] = self.memory[(self.i + j as u16) as usize]; }
-        self.i += x as u16 + 1;
+        for j in 0..=x as u16 { self.v[j as usize] = self.memory[(self.i + j) as usize]; }
         self.pc += 2;
     }
 }
