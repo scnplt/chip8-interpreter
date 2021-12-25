@@ -87,10 +87,10 @@ impl Chip8 {
         let mut memory = [0; 4096];
         memory[..80].copy_from_slice(&FONT_SET);
 
-        let canvas = sdl.video().expect("Could not create Video Subsystem!")
-            .window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
-            .build().expect("Could not create Window!")
-            .into_canvas().build().expect("Could not create Canvas!");
+        let video_subsystem = sdl.video().expect("Could not create Video Subsystem!");
+        let window_builder = video_subsystem.window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
+            .build().expect("Could not create Window!");
+        let canvas = window_builder.into_canvas().build().expect("Could not create Canvas!");
 
         Self {
             v: [0; 16],
@@ -127,7 +127,10 @@ impl Chip8 {
             let keys: Vec<Keycode> = events.keyboard_state()
                 .pressed_scancodes().filter_map(Keycode::from_scancode).collect();
 
-            for key in keys { self.keypad.down_key(key); }
+            for key in keys {
+                if key == Keycode::Escape { break 'cycle; }
+                self.keypad.down_key(key);
+            }
 
             let pc = self.pc as usize;
             let op_code = ((self.memory[pc] as u16) << 8) | self.memory[pc + 1] as u16;
