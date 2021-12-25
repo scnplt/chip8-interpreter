@@ -139,7 +139,7 @@ impl Chip8 {
             if self.dt > 0 { self.dt -= 1; }
             if self.st > 0 { self.st -= 1; }
 
-            if frame >= 3 {
+            if frame >= 2 {
                 frame = 0;
                 self.keypad.up_key();
             }
