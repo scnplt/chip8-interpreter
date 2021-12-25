@@ -362,10 +362,10 @@ impl Chip8 {
     fn drw_vx_vy_nibble(&mut self, x: u8, y: u8, n: u8) {
         self.v[0xF] = 0;
         for byte in 0..n {
-            let y = ((self.v[y as usize] + byte) % 32) as usize;
+            let y = (self.v[y as usize].overflowing_add(byte).0 % 32) as usize;
             let sprite = self.memory[(self.i + byte as u16) as usize];
             for bit in 0..8 {
-                let x = ((self.v[x as usize] + bit) % 64) as usize;
+                let x = (self.v[x as usize].overflowing_add(bit).0 % 64) as usize;
                 let pixel = (sprite >> (7 - bit)) & 1;
                 self.v[0xF] |= self.frame[y][x] & pixel;
                 self.frame[y][x] ^= pixel;
