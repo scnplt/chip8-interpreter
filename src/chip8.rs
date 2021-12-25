@@ -227,20 +227,21 @@ impl Chip8 {
             (0xF, _, 0x3, 0x3) => self.ld_b_vx(x),
             (0xF, _, 0x5, 0x5) => self.ld_i_vx(x),
             (0xF, _, 0x6, 0x5) => self.ld_vx_i(x),
-            _ => self.pc += 2,
+            _ => self.next_program(),
         }
     }
 
     // 00EE - RET
     fn ret(&mut self) {
         self.sp -= 1;
-        self.pc = self.stack[self.sp as usize] as u16 + 2;
+        self.pc = self.stack[self.sp as usize] as u16;
+        self.next_program();
     }
 
     // 00E0 - CLS
     fn cls(&mut self) {
         self.frame = [[0; FRAME_WIDTH]; FRAME_HEIGHT];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 1nnn - JP addr
@@ -257,53 +258,56 @@ impl Chip8 {
 
     // 3xkk - SE Vx, byte
     fn se_vx_byte(&mut self, x: u8, kk: u8) {
-        self.pc += if self.v[x as usize] == kk { 4 } else { 2 };
+        self.next_program();
+        if self.v[x as usize] == kk { self.next_program(); }
     }
 
     // 4xkk - SNE Vx, byte
     fn sne_vx_byte(&mut self, x: u8, kk: u8) {
-        self.pc += if self.v[x as usize] == kk { 2 } else { 4 };
+        self.next_program();
+        if self.v[x as usize] != kk { self.next_program(); }
     }
 
     // 5xy0 - SE Vx, Vy
     fn se_vx_vy(&mut self, x: u8, y: u8) {
-        self.pc += if self.v[x as usize] == self.v[y as usize] { 4 } else { 2 };
+        self.next_program();
+        if self.v[x as usize] == self.v[y as usize] { self.next_program(); }
     }
 
     // 6xkk - LD Vx, byte
     fn ld_vx_byte(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = kk;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 7xkk - ADD Vx, byte
     fn add_vx_byte(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = self.v[x as usize].overflowing_add(kk).0;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy0 - LD Vx, Vy
     fn ld_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] = self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy1 - OR Vx, Vy
     fn or_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] |= self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy2 - AND Vx, Vy
     fn and_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] &= self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy3 - XOR Vx, Vy
     fn xor_vx_vy(&mut self, x: u8, y: u8) {
         self.v[x as usize] ^= self.v[y as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy4 - ADD Vx, Vy
@@ -311,7 +315,7 @@ impl Chip8 {
         let (sum, overflow) = self.v[x as usize].overflowing_add(self.v[y as usize]);
         self.v[x as usize] = sum;
         self.v[0xF] = overflow as u8;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy5 - SUB Vx, Vy
@@ -319,14 +323,14 @@ impl Chip8 {
         let (result, overflow) = self.v[x as usize].overflowing_sub(self.v[y as usize]);
         self.v[x as usize] = result;
         self.v[0xF] = !overflow as u8;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy6 - SHR Vx {, Vy}
     fn shr_vx_vy(&mut self, x: u8) {
         self.v[0xF] = (self.v[x as usize] & 1 == 1) as u8;
         self.v[x as usize] >>= 1;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xy7 - SUBN Vx, Vy
@@ -334,36 +338,37 @@ impl Chip8 {
         let (result, overflow) = self.v[y as usize].overflowing_sub(self.v[x as usize]);
         self.v[0xF] = !overflow as u8;
         self.v[x as usize] = result;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 8xyE - SHL Vx {, Vy}
     fn shl_vx_vy(&mut self, x: u8) {
         self.v[0xF] = (self.v[x as usize] >> 7 == 1) as u8;
         self.v[x as usize] <<= 1;
-        self.pc += 2;
+        self.next_program();
     }
 
     // 9xy0 - SNE Vx, Vy
     fn sne_vx_vy(&mut self, x: u8, y: u8) {
-        self.pc += if self.v[x as usize] == self.v[y as usize] { 2 } else { 4 };
+        self.next_program();
+        if self.v[x as usize] != self.v[y as usize] { self.next_program(); }
     }
 
     // Annn - LD I, addr
     fn ld_i_addr(&mut self, nnn: u16) {
         self.i = nnn;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Bnnn - JP V0, addr
     fn jp_v0_addr(&mut self, nnn: u16) {
-        self.pc = self.v[0] as u16 + nnn;
+        self.pc = (self.v[0] as u16 + nnn).min(0xFFF);
     }
 
     // Cxkk - RND Vx, byte
     fn rnd_vx_byte(&mut self, x: u8, kk: u8) {
         self.v[x as usize] = rand::random::<u8>() & kk;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Dxyn - DRW Vx, Vy, nibble
@@ -379,55 +384,57 @@ impl Chip8 {
                 self.frame[y][x] ^= pixel;
             }
         }
-        self.pc += 2;
+        self.next_program();
     }
 
     // Ex9E - SKP Vx
     fn skp_vx(&mut self, x: u8) {
-        self.pc += if self.keypad.is_pressed(self.v[x as usize]) { 4 } else { 2 };
+        self.next_program();
+        if self.keypad.is_pressed(self.v[x as usize]) { self.next_program(); }
     }
 
     // ExA1 - SKNP Vx
     fn sknp_vx(&mut self, x: u8) {
-        self.pc += if self.keypad.is_pressed(self.v[x as usize]) { 2 } else { 4 };
+        self.next_program();
+        if !self.keypad.is_pressed(self.v[x as usize]) { self.next_program(); }
     }
 
     // Fx07 - LD Vx, DT
     fn ld_vx_dt(&mut self, x: u8) {
         self.v[x as usize] = self.dt;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx0A - LD Vx, K
     fn ld_vx_k(&mut self, x: u8) {
         if let Some(key) = self.keypad.get_key() {
             self.v[x as usize] = key;
-            self.pc += 2;
+            self.next_program();
         }
     }
 
     // Fx15 - LD DT, Vx
     fn ld_dt_vx(&mut self, x: u8) {
         self.dt = self.v[x as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx18 - LD ST, Vx
     fn ld_st_vx(&mut self, x: u8) {
         self.st = self.v[x as usize];
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx1E - ADD I, Vx
     fn add_i_vx(&mut self, x: u8) {
         self.i += self.v[x as usize] as u16;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx29 - LD F, Vx
     fn ld_f_vx(&mut self, x: u8) {
         self.i = (self.v[x as usize] * 5) as u16;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx33 - LD B, Vx
@@ -436,20 +443,22 @@ impl Chip8 {
         self.memory[self.i as usize] = data / 100;
         self.memory[(self.i + 1) as usize] = (data % 100) / 10;
         self.memory[(self.i + 2) as usize] = data % 10;
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx55 - LD [I], Vx
     fn ld_i_vx(&mut self, x: u8) {
         for j in 0..=x as u16 { self.memory[(self.i + j) as usize] = self.v[j as usize]; }
-        self.pc += 2;
+        self.next_program();
     }
 
     // Fx65 - LD Vx, [I]
     fn ld_vx_i(&mut self, x: u8) {
         for j in 0..=x as u16 { self.v[j as usize] = self.memory[(self.i + j) as usize]; }
-        self.pc += 2;
+        self.next_program();
     }
+
+    fn next_program(&mut self) { self.pc = (self.pc + 2).min(0xFFF); }
 }
 
 /*#[cfg(test)]
