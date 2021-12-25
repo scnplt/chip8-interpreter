@@ -40,9 +40,11 @@ const FONT_SET: [u8; 80] = [
 const FRAME_WIDTH: usize = 64;
 const FRAME_HEIGHT: usize = 32;
 
+const SCALE: u32 = 10;
+
 const WINDOW_TITLE: &str = "Chip-8 Emulator";
-const WINDOW_WIDTH: u32 = (FRAME_WIDTH as u32) * 8;
-const WINDOW_HEIGHT: u32 = (FRAME_HEIGHT as u32) * 8;
+const WINDOW_WIDTH: u32 = (FRAME_WIDTH as u32) * SCALE;
+const WINDOW_HEIGHT: u32 = (FRAME_HEIGHT as u32) * SCALE;
 
 const RGB_BLACK: (u8, u8, u8) = (0, 0, 0);
 const RGB_WHITE: (u8, u8, u8) = (255, 255, 255);
@@ -156,13 +158,16 @@ impl Chip8 {
                 let color = Color::from(rgb);
 
                 self.canvas.set_draw_color(color);
-                self.canvas.fill_rect(self.get_pixel_rect(x as i32 * 8, y as i32 * 8)).unwrap();
+                self.canvas.fill_rect(Rect::new(
+                    (x as u32 * SCALE) as i32,
+                    (y as u32 * SCALE) as i32,
+                    SCALE,
+                    SCALE,
+                )).expect("Fill Rect Issue");
             }
         }
         self.canvas.present();
     }
-
-    fn get_pixel_rect(&self, x: i32, y: i32) -> Rect { Rect::new(x, y, WINDOW_WIDTH, WINDOW_HEIGHT) }
 
     fn run_op_code(&mut self, code: u16) {
         let (op1, op2, op3, op4) = (
