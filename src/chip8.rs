@@ -461,13 +461,14 @@ impl Chip8 {
     fn next_program(&mut self) { self.pc = (self.pc + 2).min(0xFFF); }
 }
 
-/*#[cfg(test)]
+// cargo test -- --test-threads=1
+#[cfg(test)]
 mod tests {
     use super::*;
     
     #[test]
     fn test_00e0() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
         chip.frame = [[1; 64]; 32];
         chip.run_op_code(0x00E0);
         assert_eq!(chip.frame, [[0; 64]; 32]);
@@ -476,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_00ee() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
         chip.sp = 2;
         chip.stack = [3; 32];
         chip.run_op_code(0x00EE);
@@ -486,14 +487,14 @@ mod tests {
 
     #[test]
     fn test_1nnn() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
         chip.run_op_code(0x1444);
         assert_eq!(chip.pc, 0x444);
     }
 
     #[test]
     fn test_2nnn() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
         chip.run_op_code(0x2456);
 
         assert_eq!(chip.sp, 1);
@@ -503,7 +504,7 @@ mod tests {
 
     #[test]
     fn test_3xkk() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         // Vx == kk
         chip.v[2] = 0x12;
@@ -518,7 +519,7 @@ mod tests {
 
     #[test]
     fn test_4xkk() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         // Vx != kk
         chip.v[2] = 0x12;
@@ -533,7 +534,7 @@ mod tests {
 
     #[test]
     fn test_5xy0() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         // Vx == Vy
         chip.v[2] = 0x2;
@@ -549,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_6xkk() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.run_op_code(0x6233);
         assert_eq!(chip.v[2], 0x33);
@@ -558,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_7xkk() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[2] = 0x2;
         chip.run_op_code(0x7201);
@@ -568,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_8xy0() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0x2;
         chip.v[2] = 0x3;
@@ -579,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_8xy1() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0xF0;
         chip.v[2] = 0x0F;
@@ -590,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_8xy2() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0xFF;
         chip.v[2] = 0x0F;
@@ -601,7 +602,7 @@ mod tests {
 
     #[test]
     fn test_8xy3() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0xF0;
         chip.v[2] = 0xFF;
@@ -612,7 +613,7 @@ mod tests {
 
     #[test]
     fn test_8xy4() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0xAA;
         chip.v[2] = 0xAA;
@@ -631,7 +632,7 @@ mod tests {
 
     #[test]
     fn test_8xy5() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0xFF;
         chip.v[2] = 0x11;
@@ -650,7 +651,7 @@ mod tests {
 
     #[test]
     fn test_8xy6() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[5] = 14;
         chip.run_op_code(0x8506);
@@ -660,7 +661,7 @@ mod tests {
 
     #[test]
     fn test_8xy7() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0x1;
         chip.v[2] = 0x2;
@@ -679,7 +680,7 @@ mod tests {
 
     #[test]
     fn test_8xye() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 0xAA;
         chip.run_op_code(0x810E);
@@ -695,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_9xy0() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 1;
         chip.v[2] = 2;
@@ -709,7 +710,7 @@ mod tests {
 
     #[test]
     fn test_annn() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.run_op_code(0xA123);
         assert_eq!(chip.i, 0x123);
@@ -718,7 +719,7 @@ mod tests {
 
     #[test]
     fn test_bnnn() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[0] = 2;
         chip.run_op_code(0xB123);
@@ -727,7 +728,7 @@ mod tests {
 
     #[test]
     fn test_cxkk() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 1;
         chip.run_op_code(0xC1AA);
@@ -737,7 +738,7 @@ mod tests {
 
     #[test]
     fn test_dxyn() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.i = 0x400;
         chip.v[0] = 2;
@@ -761,7 +762,7 @@ mod tests {
 
     #[test]
     fn test_ex9e() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 1;
         chip.keypad.down_key(Keycode::Num1);
@@ -775,7 +776,7 @@ mod tests {
 
     #[test]
     fn test_exa1() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 1;
         chip.run_op_code(0xE1A1);
@@ -788,7 +789,7 @@ mod tests {
 
     #[test]
     fn test_fx07() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.dt = 2;
         chip.run_op_code(0xF107);
@@ -798,7 +799,7 @@ mod tests {
 
     #[test]
     fn test_fx0a() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.keypad.down_key(Keycode::Num1);
         chip.run_op_code(0xF10A);
@@ -808,7 +809,7 @@ mod tests {
 
     #[test]
     fn test_fx15() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 3;
         chip.run_op_code(0xF115);
@@ -818,7 +819,7 @@ mod tests {
 
     #[test]
     fn test_fx18() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 3;
         chip.run_op_code(0xF118);
@@ -828,7 +829,7 @@ mod tests {
 
     #[test]
     fn test_fx1e() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 2;
         chip.run_op_code(0xF11E);
@@ -838,18 +839,17 @@ mod tests {
 
     #[test]
     fn test_fx29() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 1;
-        chip.memory[5] = 0x11;
         chip.run_op_code(0xF129);
-        assert_eq!(chip.i, 0x11);
+        assert_eq!(chip.i, 5);
         assert_eq!(chip.pc, 0x202);
     }
 
     #[test]
     fn test_fx33() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.v[1] = 123;
         chip.run_op_code(0xF133);
@@ -861,7 +861,7 @@ mod tests {
 
     #[test]
     fn test_fx55() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
         let i = chip.i as usize;
 
         chip.v[0] = 0;
@@ -871,13 +871,12 @@ mod tests {
         assert_eq!(chip.memory[i], 0);
         assert_eq!(chip.memory[i + 1], 1);
         assert_eq!(chip.memory[i + 2], 2);
-        assert_eq!(chip.i, 0x203);
         assert_eq!(chip.pc, 0x202);
     }
 
     #[test]
     fn test_fx65() {
-        let mut chip = Chip8::new();
+        let mut chip = Chip8::new(&sdl2::init().unwrap());
 
         chip.memory[chip.i as usize] = 0;
         chip.memory[chip.i as usize + 1] = 1;
@@ -886,7 +885,6 @@ mod tests {
         assert_eq!(chip.v[0], 0);
         assert_eq!(chip.v[1], 1);
         assert_eq!(chip.v[2], 2);
-        assert_eq!(chip.i, 0x203);
         assert_eq!(chip.pc, 0x202);
     }
-}*/
+}
