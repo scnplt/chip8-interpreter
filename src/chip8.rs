@@ -42,7 +42,7 @@ const FRAME_HEIGHT: usize = 32;
 
 const SCALE: u32 = 10;
 
-const WINDOW_TITLE: &str = "Chip-8 Emulator";
+const WINDOW_TITLE: &str = "CHIP-8 interpreter";
 const WINDOW_WIDTH: u32 = (FRAME_WIDTH as u32) * SCALE;
 const WINDOW_HEIGHT: u32 = (FRAME_HEIGHT as u32) * SCALE;
 
