@@ -42,7 +42,7 @@ const FRAME_HEIGHT: usize = 32;
 
 const SCALE: u32 = 10;
 
-const WINDOW_TITLE: &str = "CHIP-8 interpreter";
+pub const WINDOW_TITLE: &str = "CHIP-8 interpreter";
 const WINDOW_WIDTH: u32 = (FRAME_WIDTH as u32) * SCALE;
 const WINDOW_HEIGHT: u32 = (FRAME_HEIGHT as u32) * SCALE;
 
@@ -117,7 +117,7 @@ impl Chip8 {
         }
     }
 
-    pub fn start_cycle(&mut self, events: &mut EventPump) {
+    pub fn start_cycle(&mut self, events: &mut EventPump, delay: u64) {
         let mut frame = 0u8;
         'cycle: loop {
             for event in events.poll_iter() {
@@ -147,7 +147,7 @@ impl Chip8 {
             }
 
             frame += 1;
-            sleep(Duration::from_millis(4));
+            sleep(Duration::from_millis(delay));
         }
     }
 

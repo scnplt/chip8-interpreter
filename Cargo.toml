@@ -1,10 +1,12 @@
 [package]
 name = "chip8-interpreter"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+authors = ["Sertan <mail@sertan.dev>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rand = "0.8.4"
 sdl2 = "0.35.1"
+clap = "2.34.0"
