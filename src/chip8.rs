@@ -82,6 +82,9 @@ pub struct Chip8 {
 
     // Canvas
     canvas: Canvas<Window>,
+
+    // Event Pump
+    event_pump: EventPump,
 }
 
 impl Chip8 {
@@ -106,6 +109,7 @@ impl Chip8 {
             memory,
             keypad: Keypad::new(),
             canvas,
+            event_pump: sdl.event_pump().expect("Event Issue"),
         }
     }
 
@@ -117,16 +121,14 @@ impl Chip8 {
         }
     }
 
-    pub fn start_cycle(&mut self, events: &mut EventPump, delay: u64) {
+    pub fn start_cycle(&mut self, delay: u64) {
         let mut frame = 0u8;
         'cycle: loop {
-            for event in events.poll_iter() {
+            for event in self.event_pump.poll_iter() {
                 if let Event::Quit { .. } = event { break 'cycle; }
             }
 
-            self.update_screen();
-
-            let keys: Vec<Keycode> = events.keyboard_state()
+            let keys: Vec<Keycode> = self.event_pump.keyboard_state()
                 .pressed_scancodes().filter_map(Keycode::from_scancode).collect();
 
             for key in keys {
@@ -384,6 +386,7 @@ impl Chip8 {
                 self.frame[y][x] ^= pixel;
             }
         }
+        self.update_screen();
         self.next_program();
     }
 
