@@ -18,20 +18,26 @@
 
 Clone the project
 
-```
+```shell
   git clone https://github.com/scnplt/chip8-interpreter
   cd chip8-interpreter
 ```
 
+Build
+
+```shell
+  cargo build
+```
+
 Run
 
-```
-  cargo run
+```shell
+  .\target\debug\chip8-interpreter --help
 ```
 
 Running Tests
 
-```
+```shell
   cargo test -- --test-threads=1
 ```
 
