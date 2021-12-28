@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::Read;
-use std::thread::sleep;
-use std::time::Duration;
+use std::time::Instant;
 
 use sdl2::{
     event::Event,
@@ -122,7 +121,7 @@ impl Chip8 {
     }
 
     pub fn start_cycle(&mut self, delay: u64) {
-        let mut frame = 0u8;
+        let mut start = Instant::now();
         'cycle: loop {
             for event in self.event_pump.poll_iter() {
                 if let Event::Quit { .. } = event { break 'cycle; }
@@ -136,20 +135,17 @@ impl Chip8 {
                 self.keypad.down_key(key);
             }
 
+            if start.elapsed().as_millis() <= delay as u128 { continue; }
+            start = Instant::now();
+
             let pc = self.pc as usize;
             let op_code = ((self.memory[pc] as u16) << 8) | self.memory[pc + 1] as u16;
             self.run_op_code(op_code);
+            self.update_screen();
 
             if self.dt > 0 { self.dt -= 1; }
             if self.st > 0 { self.st -= 1; }
-
-            if frame >= 2 {
-                frame = 0;
-                self.keypad.up_key();
-            }
-
-            frame += 1;
-            sleep(Duration::from_millis(delay));
+            self.keypad.up_key();
         }
     }
 
@@ -386,7 +382,6 @@ impl Chip8 {
                 self.frame[y][x] ^= pixel;
             }
         }
-        self.update_screen();
         self.next_program();
     }
 
