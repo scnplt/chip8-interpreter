@@ -34,15 +34,16 @@ fn main() {
         ]).get_matches();
 
     let rom_path = matches.value_of("rom_path").expect("Args error!").trim();
-    let delay = matches.value_of("delay").expect("Args error!");
+    let delay = matches.value_of("delay")
+        .expect("Args error!").parse::<u64>();
 
-    if let Ok(num) = delay.parse::<u64>() {
-        let sdl = sdl2::init().expect("Could not create SDL!");
-        let mut chip = Chip8::new(&sdl);
-        chip.load_rom(rom_path);
-        chip.start_cycle(&mut sdl.event_pump().expect("Event Issue"), num);
+    if delay.is_err() {
+        eprint!("Error: That's not a number!");
         return;
     }
 
-    eprint!("Error: That's not a number! \"{}\"", delay);
+    let sdl = sdl2::init().expect("Could not create SDL!");
+    let mut chip = Chip8::new(&sdl);
+    chip.load_rom(rom_path);
+    chip.start_cycle(delay.unwrap());
 }
