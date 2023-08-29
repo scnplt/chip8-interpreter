@@ -2,7 +2,7 @@
 # CHIP-8 Interpreter
 
 [![Build](https://github.com/scnplt/chip8-interpreter/actions/workflows/rust.yml/badge.svg)](https://github.com/scnplt/chip8-interpreter/actions/workflows/rust.yml)
-[![MIT License](https://img.shields.io/apm/l/atomic-design-ui.svg?)](https://github.com/scnplt/chip8-interpreter/blob/main/LICENSE.md)  
+[![MIT License](https://img.shields.io/github/license/scnplt/chip8-interpreter)](https://github.com/scnplt/chip8-interpreter/blob/main/LICENSE.md)  
 
 *CHIP-8 is an interpreted programming language, developed by Joseph Weisbecker. It was initially used on the COSMAC VIP and Telmac 1800 8-bit microcomputers in the mid-1970s.* [[1]](#references)
 
@@ -14,31 +14,47 @@
 
 ## Usage
 
-**Requirements:** [SDL2](https://www.libsdl.org/)
+**Requirements:** [SDL2](https://www.libsdl.org/)  
+- [Windows (MinGW)](https://github.com/Rust-SDL2/rust-sdl2#windows-mingw)
+- [Windows (MSVC)](https://github.com/Rust-SDL2/rust-sdl2#windows-msvc)
+- [Linux](https://github.com/Rust-SDL2/rust-sdl2#linux)
+- [macOS](https://github.com/Rust-SDL2/rust-sdl2#macos)
 
 Clone the project
 
-```shell
+```bash
   git clone https://github.com/scnplt/chip8-interpreter
   cd chip8-interpreter
 ```
 
 Build
 
-```shell
+```bash
   cargo build
 ```
 
 Run
 
-```shell
-  .\target\debug\chip8-interpreter --help
+```bash
+  cargo run
 ```
 
-Running Tests
+Help
 
-```shell
-  cargo test -- --test-threads=1
+```console
+USAGE:
+    chip8-interpreter [OPTIONS]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -d, --delay <delay (ms)>
+            Inter-cycle delay time [default: 2]
+
+    -r, --rom <rom path>
+            Sets a custom ch8 rom [default: ./roms/Tetris [Fran Dachille, 1991].ch8]
 ```
 
 ## References
