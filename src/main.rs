@@ -14,28 +14,25 @@ fn main() {
             Arg::with_name("rom_path")
                 .short("r")
                 .long("rom")
-                .value_name("rom path")
+                .value_name("ROM_PATH")
                 .help("Sets a custom ch8 rom")
-                .default_value("./roms/Tetris [Fran Dachille, 1991].ch8")
                 .takes_value(true)
-                .next_line_help(true)
                 .empty_values(false)
-                .multiple(false),
+                .multiple(false)
+                .required(true),
             Arg::with_name("delay")
                 .short("d")
                 .long("delay")
-                .value_name("delay (ms)")
+                .value_name("DELAY (ms)")
                 .help("Inter-cycle delay time")
                 .default_value("2")
                 .takes_value(true)
-                .next_line_help(true)
                 .empty_values(false)
                 .multiple(false)
         ]).get_matches();
 
     let rom_path = matches.value_of("rom_path").expect("Args error!").trim();
-    let delay = matches.value_of("delay")
-        .expect("Args error!").parse::<u64>();
+    let delay = matches.value_of("delay").expect("Args error!").parse::<u64>();
 
     if delay.is_err() {
         eprint!("Error: That's not a number!");

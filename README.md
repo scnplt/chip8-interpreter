@@ -33,12 +33,6 @@ Build
   cargo build
 ```
 
-Run
-
-```bash
-  cargo run
-```
-
 Help
 
 ```console
@@ -50,11 +44,8 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -d, --delay <delay (ms)>
-            Inter-cycle delay time [default: 2]
-
-    -r, --rom <rom path>
-            Sets a custom ch8 rom [default: ./roms/Tetris [Fran Dachille, 1991].ch8]
+    -d, --delay <DELAY (ms)>    Inter-cycle delay time [default: 2]
+    -r, --rom <ROM_PATH>        Sets a custom ch8 rom
 ```
 
 ## References
