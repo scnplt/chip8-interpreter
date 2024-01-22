@@ -11,9 +11,15 @@ impl Keypad {
 
     pub fn get_key(&self) -> Option<u8> { self.key }
 
-    pub fn down_key(&mut self, key: Keycode) { self.key = self.get_key_value(key); }
+    pub fn down_keys(&mut self, keys: Vec<Keycode>) {
+        for key in keys { self.down_key(key); }
+    }
 
-    pub fn up_key(&mut self) { self.key = None }
+    pub fn down_key(&mut self, key: Keycode) {
+        self.key = self.get_key_value(key);
+    }
+    
+    pub fn clear_keys(&mut self) { self.key = None }
 
     // Original             Current
     // +---+---+---+---+    +---+---+---+---+

@@ -120,33 +120,54 @@ impl Chip8 {
         }
     }
 
-    pub fn start_cycle(&mut self, delay: u64) {
+    pub fn start_cycle(&mut self) {
         let mut start = Instant::now();
+
         'cycle: loop {
-            for event in self.event_pump.poll_iter() {
-                if let Event::Quit { .. } = event { break 'cycle; }
-            }
+            if self.handle_quit() { break 'cycle; }
 
-            let keys: Vec<Keycode> = self.event_pump.keyboard_state()
-                .pressed_scancodes().filter_map(Keycode::from_scancode).collect();
+            let keys: Vec<Keycode> = self.get_pressed_keys();
+            if keys.contains(&Keycode::Escape) { break 'cycle; }
+            self.keypad.down_keys(keys);
+            
+            if self.should_delay_cycle(&mut start) { continue; }
 
-            for key in keys {
-                if key == Keycode::Escape { break 'cycle; }
-                self.keypad.down_key(key);
-            }
+            self.decrement_timers();
 
-            if start.elapsed().as_millis() <= delay as u128 { continue; }
-            start = Instant::now();
-
-            let pc = self.pc as usize;
-            let op_code = ((self.memory[pc] as u16) << 8) | self.memory[pc + 1] as u16;
+            let op_code = self.fetch_next_op_code();
             self.run_op_code(op_code);
-            self.update_screen();
 
-            if self.dt > 0 { self.dt -= 1; }
-            if self.st > 0 { self.st -= 1; }
-            self.keypad.up_key();
+            self.keypad.clear_keys();
+            self.update_screen();
         }
+    }
+
+    fn handle_quit(&mut self) -> bool {
+        for event in self.event_pump.poll_iter() {
+            if let Event::Quit { .. } = event { return true; }
+        }
+        false
+    }
+
+    fn get_pressed_keys(&self) -> Vec<Keycode> {
+        self.event_pump.keyboard_state()
+            .pressed_scancodes().filter_map(Keycode::from_scancode).collect()
+    }
+
+    fn should_delay_cycle(&self, start: &mut Instant) -> bool {
+        if start.elapsed().as_millis() <= self.dt as u128 { return true; }
+        *start = Instant::now();
+        false
+    }
+
+    fn fetch_next_op_code(&self) -> u16 {
+        let pc = self.pc as usize;
+        ((self.memory[pc] as u16) << 8) | self.memory[pc+1] as u16   
+    }
+
+    fn decrement_timers(&mut self) {
+        if self.dt > 0 { self.dt -= 1; }
+        if self.st > 0 { self.st -= 1; }
     }
 
     fn update_screen(&mut self) {
@@ -767,7 +788,7 @@ mod tests {
         chip.run_op_code(0xE19E);
         assert_eq!(chip.pc, 0x204);
 
-        chip.keypad.up_key();
+        chip.keypad.clear_keys();
         chip.run_op_code(0xE19E);
         assert_eq!(chip.pc, 0x206);
     }

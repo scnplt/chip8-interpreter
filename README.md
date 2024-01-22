@@ -44,8 +44,7 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -d, --delay <DELAY (ms)>    Inter-cycle delay time [default: 2]
-    -r, --rom <ROM_PATH>        Sets a custom ch8 rom
+    -r, --rom <ROM_PATH>    Sets a custom ch8 rom
 ```
 
 ## References
