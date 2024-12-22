@@ -33,6 +33,12 @@ Build
   cargo build
 ```
 
+Example Usage (Windows)
+
+```
+.\chip8-interpreter.exe -r '.\roms\Tetris [Fran Dachille, 1991].ch8'
+```
+
 Help
 
 ```console
